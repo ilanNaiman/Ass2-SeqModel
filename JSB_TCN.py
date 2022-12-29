@@ -1,18 +1,12 @@
-from torch.autograd import Variable
-
 from dataloader.JSB import JSB
 from utils import set_seed_device, load_data_mat, my_collate
 from model import TCN
-import matplotlib.pyplot as plt
 
 import torch
 import torch.optim as optim
 import torch.utils.data as Data
-from torch.nn.utils.rnn import pack_sequence, pad_sequence, pack_padded_sequence
 import argparse
-from tqdm import tqdm
 import numpy as np
-from scipy.io import loadmat
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--lr', default=1.e-3, type=float, help='learning rate')
@@ -21,7 +15,6 @@ parser.add_argument('--nEpoch', default=100, type=int, help='number of epochs to
 parser.add_argument('--seed', default=1, type=int, help='manual seed')
 parser.add_argument('--in_features', default=88, type=int, help='input dimension')
 parser.add_argument('--f_rnn_layers', default=1, type=int, help='number of layers (content lstm)')
-parser.add_argument('--rnn_size', default=128, type=int, help='dimensionality of hidden layer')
 parser.add_argument('--data', default='JSB', help='choose dataset')
 parser.add_argument('--t_model', default='TCN', type=str, help='model type')
 
@@ -80,15 +73,11 @@ for epoch in range(opt.nEpoch):
 
             losses_val.append(loss.item())
         vloss = np.mean(losses_val)
-        # if vloss < best_vloss:
-        #     with open(model_name, "wb") as f:
-        #         torch.save(model, f)
-        #         print("Saved model!\n")
-        #     best_vloss = vloss
-        # if epoch > 10 and vloss > max(total_va_losses[-3:]):
-        #     opt.lr /= 5
-        #     for param_group in optimizer.param_groups:
-        #         param_group['lr'] = opt.lr
+        if vloss < best_vloss:
+            with open(model_name, "wb") as f:
+                torch.save(model, f)
+                print("Saved model!\n")
+            best_vloss = vloss
 
     # test iter
     model.eval()

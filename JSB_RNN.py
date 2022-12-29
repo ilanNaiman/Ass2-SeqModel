@@ -1,19 +1,13 @@
-from torch.autograd import Variable
-
-from dataloader.Exchange import Exchange
 from dataloader.JSB import JSB
-from utils import set_seed_device, load_data_mat, load_data_exchange
+from utils import set_seed_device, load_data_mat, my_collate
 from model import ForecastNet
-import matplotlib.pyplot as plt
 
 import torch
 import torch.optim as optim
 import torch.utils.data as Data
-from torch.nn.utils.rnn import pack_sequence, pad_sequence, pack_padded_sequence
+from torch.nn.utils.rnn import pack_padded_sequence
 import argparse
-from tqdm import tqdm
 import numpy as np
-from scipy.io import loadmat
 
 
 parser = argparse.ArgumentParser()
@@ -33,40 +27,10 @@ opt.device = set_seed_device(opt.seed)
 
 # -------------- generate train and test set --------------
 # load data, convert to tensors and
-if opt.data == 'JSB':
-    train_set, valid_set, test_set = load_data_mat()
-    train_data = JSB(data=train_set)
-    valid_data = JSB(data=valid_set)
-    test_data = JSB(data=test_set)
-
-else:
-    train_data = Exchange('./data/', flag='train')
-    valid_data = Exchange('./data/', flag='val')
-    test_data = Exchange('./data/', flag='test')
-
-
-def binaryMatrix(l, idx):
-    m = []
-    for i, seq in enumerate(l):
-        m.append([])
-        for jj, ss in enumerate(seq):
-            if jj >= idx[i]:
-                m[i].append(torch.zeros(ss.shape[0], dtype=torch.int32))
-            else:
-                m[i].append(torch.ones(ss.shape[0], dtype=torch.int32))
-    return m
-
-
-def my_collate(batch):
-    # batch contains a list of tuples of structure (sequence, target)
-    data = [item['input'] for item in batch]
-    padded_data = pad_sequence(data, batch_first=True)
-    targets = [item['target'] for item in batch]
-    padded_targets = pad_sequence(targets, batch_first=True)
-    idx = [item['idx'] for item in batch]
-    mask = binaryMatrix(padded_data, idx)
-    mask = (torch.cat([torch.vstack(m).unsqueeze(dim=0) for m in mask])).bool()
-    return {'input': padded_data, 'target': padded_targets,  'idx': idx, 'mask': mask}
+train_set, valid_set, test_set = load_data_mat()
+train_data = JSB(data=train_set)
+valid_data = JSB(data=valid_set)
+test_data = JSB(data=test_set)
 
 
 train_loader = Data.DataLoader(dataset=train_data, batch_size=opt.batch_size, shuffle=True, num_workers=0, collate_fn=my_collate, drop_last=True)
@@ -115,10 +79,6 @@ for epoch in range(opt.nEpoch):
                 torch.save(model, f)
                 print("Saved model!\n")
             best_vloss = vloss
-        # if epoch > 10 and vloss > max(total_va_losses[-3:]):
-        #     opt.lr /= 5
-        #     for param_group in optimizer.param_groups:
-        #         param_group['lr'] = opt.lr
 
     # test iter
     model.eval()

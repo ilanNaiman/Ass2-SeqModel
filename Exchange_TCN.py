@@ -1,19 +1,12 @@
-from torch.autograd import Variable
-
 from dataloader.Exchange import Exchange
-from dataloader.JSB import JSB
-from utils import set_seed_device, load_data_mat, load_data_exchange
-from model import ForecastNet
-import matplotlib.pyplot as plt
+from utils import set_seed_device
+from model import TCN
 
 import torch
 import torch.optim as optim
 import torch.utils.data as Data
-from torch.nn.utils.rnn import pack_sequence, pad_sequence, pack_padded_sequence
 import argparse
-from tqdm import tqdm
 import numpy as np
-from scipy.io import loadmat
 
 
 parser = argparse.ArgumentParser()
@@ -22,17 +15,14 @@ parser.add_argument('--batch_size', default=32, type=int, help='batch size')
 parser.add_argument('--nEpoch', default=100, type=int, help='number of epochs to train for')
 parser.add_argument('--seed', default=1, type=int, help='manual seed')
 parser.add_argument('--in_features', default=1, type=int, help='input dimension')
-parser.add_argument('--data', default='exchange', help='choose dataset')
-parser.add_argument('--f_rnn_layers', default=1, type=int, help='number of layers (content lstm)')
-parser.add_argument('--rnn_size', default=128, type=int, help='dimensionality of hidden layer')
-parser.add_argument('--pred_len', default=1, type=int, help='prediction horizon')
+parser.add_argument('--data', default='Exchange', help='choose dataset')
+parser.add_argument('--t_model', default='TCN', type=str, help='model type')
 
 
 opt = parser.parse_args()
 opt.device = set_seed_device(opt.seed)
 
 # -------------- generate train and test set --------------
-# load data, convert to tensors and
 train_data = Exchange('./data/', flag='train')
 valid_data = Exchange('./data/', flag='val')
 test_data = Exchange('./data/', flag='test')
@@ -43,15 +33,16 @@ valid_loader = Data.DataLoader(dataset=valid_data, batch_size=opt.batch_size, sh
 test_loader = Data.DataLoader(dataset=test_data, batch_size=opt.batch_size, shuffle=False, num_workers=0, drop_last=True)
 
 # -------------- initialize model & optimizer --------------
-model = ForecastNet(opt.in_features, opt.rnn_size).to(opt.device)
+n_channels = [128] * 4
+model = TCN(opt.in_features, opt.in_features, n_channels, 5, 0.25).to(opt.device)
 optimizer = optim.Adam(model.parameters(), lr=opt.lr)
-scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, eta_min=5e-5, T_0=(opt.nEpoch+1)//2, T_mult=1)
+scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, eta_min=2e-4, T_0=(opt.nEpoch+1)//2, T_mult=1)
 criterion = torch.nn.MSELoss()
+model_name = "{0}_{1}.pt".format(opt.data, opt.t_model)
 
 # -------------- train & eval the model --------------
 best_vloss = 1e8
 total_tr_losses, total_va_losses, total_te_losses = [], [], []
-
 for epoch in range(opt.nEpoch):
     if epoch:
         scheduler.step()
@@ -60,8 +51,11 @@ for epoch in range(opt.nEpoch):
     for batch_x, batch_y in train_loader:
         x, target = batch_x.to(opt.device).float(), batch_y.to(opt.device).float()
         optimizer.zero_grad()
+
         output = model(x)
-        loss = criterion(target, output)
+        loss = criterion(target.double(), output)
+
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 0.2)
         loss.backward()
         optimizer.step()
 
@@ -69,6 +63,7 @@ for epoch in range(opt.nEpoch):
         target = train_loader.dataset.scaler.inverse_transform(target[:, [-1]].squeeze(-1).detach().cpu())
         target, output = torch.tensor(target), torch.tensor(output)
         loss = criterion(target, output)
+
         losses_train.append(loss.item())
 
     # validation iter
@@ -77,7 +72,7 @@ for epoch in range(opt.nEpoch):
         for batch_x, batch_y in valid_loader:
             x, target = batch_x.to(opt.device).float(), batch_y.to(opt.device).float()
             output = model(x)
-            # output, target = output[:, -opt.pred_len:], target[:, -opt.pred_len:]
+
             output = valid_loader.dataset.scaler.inverse_transform(output[:, [-1]].squeeze(-1).cpu())
             target = valid_loader.dataset.scaler.inverse_transform(target[:, [-1]].squeeze(-1).cpu())
             target, output = torch.tensor(target), torch.tensor(output)
@@ -87,10 +82,6 @@ for epoch in range(opt.nEpoch):
         vloss = np.mean(losses_val)
         if vloss < best_vloss:
             best_vloss = vloss
-        # if epoch > 10 and vloss > max(total_va_losses[-3:]):
-        #     opt.lr /= 5
-        #     for param_group in optimizer.param_groups:
-        #         param_group['lr'] = opt.lr
 
 
     # test iter
@@ -99,9 +90,9 @@ for epoch in range(opt.nEpoch):
         for batch_x, batch_y in test_loader:
             x, target = batch_x.to(opt.device).float(), batch_y.to(opt.device).float()
             output = model(x)
-            # output, target = output[:, -opt.pred_len:], target[:, -opt.pred_len:]
-            output = valid_loader.dataset.scaler.inverse_transform(output[:, [-1]].squeeze(-1).cpu())
-            target = valid_loader.dataset.scaler.inverse_transform(target[:, [-1]].squeeze(-1).cpu())
+
+            output = test_loader.dataset.scaler.inverse_transform(output[:, [-1]].squeeze(-1).cpu())
+            target = test_loader.dataset.scaler.inverse_transform(target[:, [-1]].squeeze(-1).cpu())
             target, output = torch.tensor(target), torch.tensor(output)
             loss = criterion(target, output)
 
@@ -111,5 +102,4 @@ for epoch in range(opt.nEpoch):
     total_tr_losses.append(np.mean(losses_train))
     total_va_losses.append(np.mean(losses_val))
     total_te_losses.append(np.mean(losses_test))
-
 

@@ -1,23 +1,16 @@
-from torch.autograd import Variable
-
 from dataloader.Exchange import Exchange
-from dataloader.JSB import JSB
-from utils import set_seed_device, load_data_mat, load_data_exchange, split_seq, generate_square_subsequent_mask
-from model_transformer import TransformerForecastNet
-import matplotlib.pyplot as plt
+from utils import set_seed_device
+from model import TransformerForecastNet
 
 import torch
 import torch.optim as optim
 import torch.utils.data as Data
-from torch.nn.utils.rnn import pack_sequence, pad_sequence, pack_padded_sequence
 import argparse
-from tqdm import tqdm
 import numpy as np
-from scipy.io import loadmat
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--lr', default=1.e-4, type=float, help='learning rate')
+parser.add_argument('--lr', default=5.e-4, type=float, help='learning rate')
 parser.add_argument('--batch_size', default=32, type=int, help='batch size')
 parser.add_argument('--nEpoch', default=100, type=int, help='number of epochs to train for')
 parser.add_argument('--seed', default=1, type=int, help='manual seed')
@@ -52,24 +45,24 @@ criterion = torch.nn.MSELoss()
 best_vloss = 1e8
 total_tr_losses, total_va_losses, total_te_losses = [], [], []
 for epoch in range(opt.nEpoch):
-    # if epoch:
-    #     scheduler.step()
+    if epoch:
+        scheduler.step()
     losses_train, losses_val, losses_test = [], [], []
     model.train()
     for batch_x, batch_y in train_loader:
         x, target = batch_x.to(opt.device).float(), batch_y.to(opt.device).float()
         optimizer.zero_grad()
-        output = model(x, target)
+        output, _, _, tgt, _, _ = model(x, target)
 
         # output, target = output[:, -opt.pred_len:], target[:, -opt.pred_len:]
-        loss = criterion(target, output)
+        loss = criterion(tgt, output)
         loss.backward()
         optimizer.step()
 
         output = train_loader.dataset.scaler.inverse_transform(output[:, [-1]].squeeze(-1).detach().cpu())
-        target = train_loader.dataset.scaler.inverse_transform(target[:, [-1]].squeeze(-1).detach().cpu())
-        target, output = torch.tensor(target), torch.tensor(output)
-        loss = criterion(target, output)
+        tgt = train_loader.dataset.scaler.inverse_transform(tgt[:, [-1]].squeeze(-1).detach().cpu())
+        tgt, output = torch.tensor(tgt), torch.tensor(output)
+        loss = criterion(tgt, output)
 
         losses_train.append(loss.item())
 
@@ -78,12 +71,12 @@ for epoch in range(opt.nEpoch):
     with torch.no_grad():
         for batch_x, batch_y in valid_loader:
             x, target = batch_x.to(opt.device).float(), batch_y.to(opt.device).float()
-            output = model(x, target)
+            output, _, _, tgt, _, _  = model(x, target)
 
             output = valid_loader.dataset.scaler.inverse_transform(output[:, [-1]].squeeze(-1).cpu())
-            target = valid_loader.dataset.scaler.inverse_transform(target[:, [-1]].squeeze(-1).cpu())
-            target, output = torch.tensor(target), torch.tensor(output)
-            loss = criterion(target, output)
+            tgt = valid_loader.dataset.scaler.inverse_transform(tgt[:, [-1]].squeeze(-1).cpu())
+            tgt, output = torch.tensor(tgt), torch.tensor(output)
+            loss = criterion(tgt, output)
 
             losses_val.append(loss.item())
         vloss = np.mean(losses_val)
@@ -96,11 +89,11 @@ for epoch in range(opt.nEpoch):
         for batch_x, batch_y in test_loader:
             x, target = batch_x.to(opt.device).float(), batch_y.to(opt.device).float()
 
-            output = model(x, target)
+            output, _, _, tgt, _, _ = model(x, target)
             output = test_loader.dataset.scaler.inverse_transform(output[:, [-1]].squeeze(-1).cpu())
-            target = test_loader.dataset.scaler.inverse_transform(target[:, [-1]].squeeze(-1).cpu())
-            target, output = torch.tensor(target), torch.tensor(output)
-            loss = criterion(target, output)
+            tgt = test_loader.dataset.scaler.inverse_transform(tgt[:, [-1]].squeeze(-1).cpu())
+            tgt, output = torch.tensor(tgt), torch.tensor(output)
+            loss = criterion(tgt, output)
 
             losses_test.append(loss.item())
 
@@ -108,5 +101,3 @@ for epoch in range(opt.nEpoch):
     total_tr_losses.append(np.mean(losses_train))
     total_va_losses.append(np.mean(losses_val))
     total_te_losses.append(np.mean(losses_test))
-
-

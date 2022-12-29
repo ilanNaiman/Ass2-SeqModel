@@ -1,18 +1,12 @@
-from torch.autograd import Variable
-
 from dataloader.JSB import JSB
-from utils import set_seed_device, split_seq, load_data_mat, my_collate, generate_square_subsequent_mask, generate_pad_mask, binaryMatrix
+from utils import set_seed_device, load_data_mat, my_collate, binaryMatrix
 from model import TransformerForecastNet
-import matplotlib.pyplot as plt
 
 import torch
 import torch.optim as optim
 import torch.utils.data as Data
-from torch.nn.utils.rnn import pack_sequence, pad_sequence, pack_padded_sequence
 import argparse
-from tqdm import tqdm
 import numpy as np
-from scipy.io import loadmat
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--lr', default=4.e-4, type=float, help='learning rate')
@@ -46,7 +40,6 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, eta_
 # -------------- train & eval the model --------------
 best_vloss = 1e8
 total_tr_losses, total_va_losses, total_te_losses = [], [], []
-
 
 for epoch in range(opt.nEpoch):
     if epoch:
@@ -85,14 +78,6 @@ for epoch in range(opt.nEpoch):
 
             loss = model.loss(tgt, output).masked_select(mask).sum() / sum(tgt_len)
             losses_val.append(loss.item())
-        # vloss = np.mean(losses_val)
-        # if vloss < best_vloss:
-        #     best_vloss = vloss
-        # if epoch > 10 and vloss > max(total_va_losses[-3:]):
-        #     opt.lr /= 2
-        #     for param_group in optimizer.param_groups:
-        #         param_group['lr'] = opt.lr
-        opt.lr = optimizer.param_groups[0]['lr']
 
     # test iter
     model.eval()

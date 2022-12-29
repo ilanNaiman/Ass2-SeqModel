@@ -13,7 +13,7 @@ class Exchange(Dataset):
         # size [seq_len, label_len, pred_len]
         # info
         if size == None:
-            self.seq_len = 64 * 4 * 4
+            self.seq_len = 24 * 4 * 4
             self.pred_len = 1
         else:
             self.seq_len = size[0]

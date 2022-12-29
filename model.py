@@ -56,21 +56,10 @@ class TransformerForecastNet(nn.Module):
         self.input_dim = in_features
         self.transformer = nn.Transformer(d_model=hidden_size, nhead=nhead, num_encoder_layers=num_encoder_layers, num_decoder_layers=num_decoder_layers,
                                  dim_feedforward=dim_feedforward, dropout=dropout, activation="relu", batch_first=True)
-        self.positional_encoding = PositionalEncoding(d_model=hidden_size, dropout=0.1, max_len=200)
+        self.positional_encoding = PositionalEncoding(d_model=hidden_size, dropout=0.1, max_len=384)
         self.linear = nn.Linear(in_features, hidden_size)
         self.linear_out = nn.Linear(hidden_size, in_features)
         self.loss_f = nn.BCEWithLogitsLoss(reduction='none')
-
-    # def forward(self, src, mask_pad, mask_future):
-    #     pe_src = self.positional_encoding(src)
-    #     output = self.transformer(pe_src,
-    #                               pe_src,
-    #                               src_mask=mask_future,
-    #                               tgt_mask=mask_future,
-    #                               src_key_padding_mask=mask_pad,
-    #                               tgt_key_padding_mask=mask_pad)
-    #
-    #     return output
 
     def forward(self, x, target, idx=None, pad=False):
         if not idx:

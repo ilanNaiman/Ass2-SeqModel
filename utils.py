@@ -1,10 +1,8 @@
 import torch
-import pickle
 import numpy as np
-import math
-import pandas as pd
 from scipy.io import loadmat
 from torch.nn.utils.rnn import pad_sequence
+import matplotlib.pyplot as plt
 
 
 def set_seed_device(seed):
@@ -36,22 +34,6 @@ def load_data_mat():
             data[i] = torch.Tensor(data[i].astype(np.float32))
 
     return Xtrain, Xvalid, Xtest
-
-
-def load_data_exchange():
-    # load data, convert to tensors and
-    df = pd.read_csv('./data/exchange_rate.csv')
-
-    # input_size = 88
-    # Xtrain = data['traindata'][0]
-    # Xvalid = data['validdata'][0]
-    # Xtest = data['testdata'][0]
-    #
-    # for data in [Xtrain, Xvalid, Xtest]:
-    #     for i in range(len(data)):
-    #         data[i] = torch.Tensor(data[i].astype(np.float32))
-
-    # return Xtrain, Xvalid, Xtest
 
 
 def binaryMatrix(l, idx):
@@ -125,3 +107,42 @@ def generate_pad_mask(seq_lens):
     for ii in seq_lens:
         m.append(torch.Tensor([False for _ in range(ii)] + [True for _ in range(max_len - ii)]))
     return torch.vstack(m).bool()
+
+def plt_all_models_loss(total_tr_losses, total_va_losses, total_te_losses,
+                        total_tr_losses_tcn, total_va_losses_tcn, total_te_losses_tcn,
+                        total_tr_losses_trans, total_va_losses_trans, total_te_losses_trans):
+    fig, axs = plt.subplots(2, 2, figsize=(12, 8))
+    gs = fig.add_gridspec(4, 4)
+    ax1 = plt.subplot(gs[:2, :2])
+    ax1.plot(range(len(total_tr_losses)), total_tr_losses, label='Train')
+    ax1.plot(range(len(total_va_losses)), total_va_losses, label='Val')
+    ax1.plot(range(len(total_te_losses)), total_te_losses, label='Test')
+    ax1.set_title('RNN - Train, Val, Test Losses')
+    ax1.set_yscale('log')
+    ax1.legend()
+    ax2 = plt.subplot(gs[:2, 2:])
+    ax2.plot(range(len(total_tr_losses_tcn)), total_tr_losses_tcn, label='Train')
+    ax2.plot(range(len(total_va_losses_tcn)), total_va_losses_tcn, label='Val')
+    ax2.plot(range(len(total_te_losses_tcn)), total_te_losses_tcn, label='Test')
+    ax2.set_title('TCN - Train, Val, Test Losses')
+    ax2.set_yscale('log')
+    ax2.legend()
+    ax3 = plt.subplot(gs[2:4, 1:3])
+    ax3.plot(range(len(total_tr_losses_trans)), total_tr_losses_trans, label='Train')
+    ax3.plot(range(len(total_va_losses_trans)), total_va_losses_trans, label='Val')
+    ax3.plot(range(len(total_te_losses_trans)), total_te_losses_trans, label='Test')
+    ax3.set_title('Transformer - Train, Val, Test Losses')
+    ax3.set_yscale('log')
+    ax3.legend()
+
+    for ax in axs.flat:
+        ax.set(xlabel='Epoch', ylabel='NLL')
+
+    # Hide x labels and tick labels for top plots and y ticks for right plots.
+    for ax in axs.flat:
+        ax.label_outer()
+
+    plt.tight_layout()
+    plt.savefig(f'./results/Exchange_all_train_val_test_net.pdf', transparent=True, bbox_inches='tight', pad_inches=0,
+                dpi=300)
+    plt.show()
